@@ -1,0 +1,657 @@
+"""
+DATABASE BACKUP & MAINTENANCE MONITOR
+Phase 4: Dashboard Generator
+
+Reads analytics data and generates an interactive HTML dashboard.
+
+Run: python dashboard.py
+Creates: dashboard.html (open in any browser)
+"""
+
+import json
+from analytics import generate_report
+
+
+def build_dashboard(db_path="monitoring.db", output_path="dashboard.html"):
+    """Generate the HTML dashboard from analytics data."""
+
+    report = generate_report(db_path)
+    data_json = json.dumps(report)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DB Maintenance Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {{
+  --bg: #0b0e14;
+  --surface: #131720;
+  --surface-2: #1a1f2e;
+  --border: #232a3b;
+  --text: #e0e4eb;
+  --text-dim: #6b7280;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59,130,246,0.15);
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --radius: 12px;
+}}
+
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+
+body {{
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}}
+
+.top-bar {{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}}
+
+.top-bar h1 {{
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}}
+
+.top-bar h1 span {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+}}
+
+.top-bar .meta {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}}
+
+.dashboard {{
+  padding: 1.5rem 2rem 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}}
+
+/* ── Summary Cards ── */
+.summary-row {{
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}}
+
+.card {{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.4rem;
+}}
+
+.card-label {{
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4rem;
+}}
+
+.card-value {{
+  font-size: 2rem;
+  font-weight: 700;
+}}
+
+.card-value.green {{ color: var(--green); }}
+.card-value.amber {{ color: var(--amber); }}
+.card-value.red {{ color: var(--red); }}
+.card-value.blue {{ color: var(--accent); }}
+
+.card-sub {{
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+}}
+
+/* ── Grid Layout ── */
+.grid-2 {{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}}
+
+.grid-full {{
+  margin-bottom: 1.5rem;
+}}
+
+.panel {{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+}}
+
+.panel-title {{
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}}
+
+.panel-title .dot {{
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}}
+
+.dot-blue {{ background: var(--accent); }}
+.dot-green {{ background: var(--green); }}
+.dot-amber {{ background: var(--amber); }}
+.dot-red {{ background: var(--red); }}
+
+/* ── Alerts ── */
+.alert-list {{ display: flex; flex-direction: column; gap: 0.6rem; }}
+
+.alert-item {{
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}}
+
+.alert-item.critical {{
+  background: var(--red-dim);
+  border-left: 3px solid var(--red);
+}}
+
+.alert-item.warning {{
+  background: var(--amber-dim);
+  border-left: 3px solid var(--amber);
+}}
+
+.alert-severity {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.1rem;
+}}
+
+.alert-item.critical .alert-severity {{
+  background: var(--red);
+  color: #fff;
+}}
+
+.alert-item.warning .alert-severity {{
+  background: var(--amber);
+  color: #000;
+}}
+
+.alert-body {{ flex: 1; }}
+.alert-job {{ font-weight: 600; }}
+.alert-msg {{ color: var(--text-dim); margin-top: 0.15rem; }}
+
+/* ── Tables ── */
+.data-table {{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}}
+
+.data-table th {{
+  text-align: left;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}}
+
+.data-table td {{
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}}
+
+.data-table tr:last-child td {{ border-bottom: none; }}
+.data-table tr:hover td {{ background: var(--surface-2); }}
+
+.badge {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+}}
+
+.badge-green {{ background: var(--green-dim); color: var(--green); }}
+.badge-amber {{ background: var(--amber-dim); color: var(--amber); }}
+.badge-red {{ background: var(--red-dim); color: var(--red); }}
+
+/* ── Chart containers ── */
+.chart-wrap {{
+  position: relative;
+  height: 280px;
+}}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {{
+  .summary-row {{ grid-template-columns: repeat(2, 1fr); }}
+  .grid-2 {{ grid-template-columns: 1fr; }}
+  .dashboard {{ padding: 1rem; }}
+}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>DB Maintenance Monitor <span>LIVE</span></h1>
+  <div class="meta">Generated: <span id="gen-time"></span></div>
+</div>
+
+<div class="dashboard">
+
+  <!-- Summary Cards -->
+  <div class="summary-row" id="summary-cards"></div>
+
+  <!-- Alerts + Success Rates -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Active Alerts</div>
+      <div class="alert-list" id="alerts-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-green"></span> Success Rate by Job</div>
+      <div class="chart-wrap"><canvas id="chart-success"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Daily Trend + Duration -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-blue"></span> Daily Execution Trend</div>
+      <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-amber"></span> Job Duration (min / avg / max)</div>
+      <div class="chart-wrap"><canvas id="chart-duration"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Storage + Failure Causes -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-blue"></span> Cumulative Storage Growth (MB)</div>
+      <div class="chart-wrap"><canvas id="chart-storage"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Top Failure Causes</div>
+      <div class="chart-wrap"><canvas id="chart-failures"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Failure Log Table -->
+  <div class="grid-full">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Failure Log</div>
+      <table class="data-table" id="failure-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Database</th>
+            <th>Job</th>
+            <th>Type</th>
+            <th>Error</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Storage by Instance -->
+  <div class="grid-full">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-green"></span> Storage Usage by Instance</div>
+      <table class="data-table" id="storage-table">
+        <thead>
+          <tr>
+            <th>Instance</th>
+            <th>Engine</th>
+            <th>Allocated (GB)</th>
+            <th>Backup Storage Used (MB)</th>
+            <th>Backup Storage Used (GB)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DATA = {data_json};
+
+// ── Chart.js defaults ──
+Chart.defaults.color = '#6b7280';
+Chart.defaults.borderColor = '#232a3b';
+Chart.defaults.font.family = "'Outfit', sans-serif";
+Chart.defaults.font.size = 11;
+
+// ── Helpers ──
+function fmt(n) {{ return n.toLocaleString(); }}
+function fmtDur(s) {{ 
+  if (s < 60) return s.toFixed(0) + 's';
+  return (s / 60).toFixed(1) + 'm'; 
+}}
+
+// ── Summary Cards ──
+const hs = DATA.health_summary;
+const rateClass = hs.success_rate_pct >= 90 ? 'green' : hs.success_rate_pct >= 75 ? 'amber' : 'red';
+document.getElementById('gen-time').textContent = DATA.generated_at;
+document.getElementById('summary-cards').innerHTML = `
+  <div class="card">
+    <div class="card-label">Success Rate</div>
+    <div class="card-value ${{rateClass}}">${{hs.success_rate_pct}}%</div>
+    <div class="card-sub">Overall</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Executions</div>
+    <div class="card-value blue">${{fmt(hs.total_executions)}}</div>
+    <div class="card-sub">Last 30 days</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Successes</div>
+    <div class="card-value green">${{fmt(hs.successes)}}</div>
+    <div class="card-sub">jobs completed</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Failures</div>
+    <div class="card-value red">${{fmt(hs.failures)}}</div>
+    <div class="card-sub">jobs failed</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Warnings</div>
+    <div class="card-value amber">${{fmt(hs.warnings)}}</div>
+    <div class="card-sub">slow runs</div>
+  </div>
+`;
+
+// ── Alerts ──
+const alertsEl = document.getElementById('alerts-list');
+if (DATA.alerts.length === 0) {{
+  alertsEl.innerHTML = '<div style="color:var(--green);font-size:0.9rem;">All systems healthy — no active alerts.</div>';
+}} else {{
+  alertsEl.innerHTML = DATA.alerts.map(a => `
+    <div class="alert-item ${{a.severity.toLowerCase()}}">
+      <span class="alert-severity">${{a.severity}}</span>
+      <div class="alert-body">
+        <div class="alert-job">${{a.instance}} / ${{a.job}}</div>
+        <div class="alert-msg">${{a.message}}</div>
+      </div>
+    </div>
+  `).join('');
+}}
+
+// ── Success Rate Chart ──
+const srData = DATA.success_rates;
+new Chart(document.getElementById('chart-success'), {{
+  type: 'bar',
+  data: {{
+    labels: srData.map(r => r.job_name),
+    datasets: [{{
+      label: 'Success Rate %',
+      data: srData.map(r => r.success_rate_pct),
+      backgroundColor: srData.map(r =>
+        r.success_rate_pct >= 90 ? '#10b981' :
+        r.success_rate_pct >= 75 ? '#f59e0b' : '#ef4444'
+      ),
+      borderRadius: 6,
+      maxBarThickness: 40,
+    }}]
+  }},
+  options: {{
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{
+      legend: {{ display: false }},
+      tooltip: {{
+        callbacks: {{
+          afterLabel: (ctx) => {{
+            const r = srData[ctx.dataIndex];
+            return `${{r.successes}}/${{r.total_runs}} runs | ${{r.instance_name}}`;
+          }}
+        }}
+      }}
+    }},
+    scales: {{
+      x: {{ max: 100, grid: {{ color: '#1a1f2e' }} }},
+      y: {{ grid: {{ display: false }} }}
+    }}
+  }}
+}});
+
+// ── Daily Trend Chart ──
+const trend = DATA.daily_trend;
+new Chart(document.getElementById('chart-trend'), {{
+  type: 'bar',
+  data: {{
+    labels: trend.map(r => r.run_date.slice(5)),
+    datasets: [
+      {{
+        label: 'Success',
+        data: trend.map(r => r.successes),
+        backgroundColor: '#10b981',
+        borderRadius: 3,
+      }},
+      {{
+        label: 'Warning',
+        data: trend.map(r => r.warnings),
+        backgroundColor: '#f59e0b',
+        borderRadius: 3,
+      }},
+      {{
+        label: 'Failed',
+        data: trend.map(r => r.failures),
+        backgroundColor: '#ef4444',
+        borderRadius: 3,
+      }}
+    ]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{ legend: {{ position: 'top', labels: {{ boxWidth: 12, padding: 15 }} }} }},
+    scales: {{
+      x: {{ stacked: true, grid: {{ display: false }},
+            ticks: {{ maxRotation: 45, font: {{ size: 9 }} }} }},
+      y: {{ stacked: true, grid: {{ color: '#1a1f2e' }} }}
+    }}
+  }}
+}});
+
+// ── Duration Chart ──
+const dur = DATA.duration_stats;
+new Chart(document.getElementById('chart-duration'), {{
+  type: 'bar',
+  data: {{
+    labels: dur.map(r => r.job_name),
+    datasets: [
+      {{
+        label: 'Min',
+        data: dur.map(r => r.min_duration),
+        backgroundColor: 'rgba(59,130,246,0.3)',
+        borderRadius: 3,
+      }},
+      {{
+        label: 'Avg',
+        data: dur.map(r => r.avg_duration),
+        backgroundColor: 'rgba(59,130,246,0.6)',
+        borderRadius: 3,
+      }},
+      {{
+        label: 'Max',
+        data: dur.map(r => r.max_duration),
+        backgroundColor: 'rgba(59,130,246,1)',
+        borderRadius: 3,
+      }}
+    ]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{
+      legend: {{ position: 'top', labels: {{ boxWidth: 12, padding: 15 }} }},
+      tooltip: {{
+        callbacks: {{
+          label: (ctx) => `${{ctx.dataset.label}}: ${{fmtDur(ctx.raw)}}`
+        }}
+      }}
+    }},
+    scales: {{
+      x: {{ grid: {{ display: false }},
+            ticks: {{ maxRotation: 45, font: {{ size: 9 }} }} }},
+      y: {{ grid: {{ color: '#1a1f2e' }},
+           ticks: {{ callback: v => fmtDur(v) }} }}
+    }}
+  }}
+}});
+
+// ── Storage Growth Chart ──
+const stor = DATA.storage_trend;
+new Chart(document.getElementById('chart-storage'), {{
+  type: 'line',
+  data: {{
+    labels: stor.map(r => r.run_date.slice(5)),
+    datasets: [{{
+      label: 'Cumulative Storage (MB)',
+      data: stor.map(r => r.cumulative_storage_mb),
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      borderWidth: 2,
+    }}]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{ legend: {{ display: false }} }},
+    scales: {{
+      x: {{ grid: {{ display: false }},
+            ticks: {{ maxRotation: 45, font: {{ size: 9 }} }} }},
+      y: {{ grid: {{ color: '#1a1f2e' }},
+           ticks: {{ callback: v => (v/1024).toFixed(1) + ' GB' }} }}
+    }}
+  }}
+}});
+
+// ── Failure Causes Chart ──
+const fc = DATA.failure_causes;
+const fcColors = ['#ef4444','#f59e0b','#3b82f6','#10b981','#8b5cf6','#ec4899','#6b7280'];
+new Chart(document.getElementById('chart-failures'), {{
+  type: 'doughnut',
+  data: {{
+    labels: fc.map(r => r.error_message.length > 30
+      ? r.error_message.slice(0,30) + '...' : r.error_message),
+    datasets: [{{
+      data: fc.map(r => r.occurrences),
+      backgroundColor: fcColors.slice(0, fc.length),
+      borderWidth: 0,
+    }}]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{
+      legend: {{
+        position: 'right',
+        labels: {{ boxWidth: 10, padding: 8, font: {{ size: 10 }} }}
+      }},
+      tooltip: {{
+        callbacks: {{
+          afterLabel: (ctx) => `Affected: ${{fc[ctx.dataIndex].affected_jobs}}`
+        }}
+      }}
+    }}
+  }}
+}});
+
+// ── Failure Log Table ──
+const ftBody = document.querySelector('#failure-table tbody');
+DATA.failure_details.forEach(f => {{
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;">${{f.started_at}}</td>
+    <td>${{f.instance_name}}</td>
+    <td>${{f.job_name}}</td>
+    <td><span class="badge badge-red">${{f.job_type}}</span></td>
+    <td style="color:var(--red)">${{f.error_message}}</td>
+    <td>${{fmtDur(f.duration_seconds)}}</td>
+  `;
+  ftBody.appendChild(tr);
+}});
+
+// ── Storage Table ──
+const stBody = document.querySelector('#storage-table tbody');
+DATA.storage_by_instance.forEach(s => {{
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="font-weight:500">${{s.instance_name}}</td>
+    <td><span class="badge badge-green">${{s.db_engine}}</span></td>
+    <td>${{fmt(s.allocated_gb)}}</td>
+    <td>${{fmt(s.total_storage_used_mb)}}</td>
+    <td>${{s.total_storage_used_gb}}</td>
+  `;
+  stBody.appendChild(tr);
+}});
+</script>
+
+</body>
+</html>"""
+
+    with open(output_path, "w") as f:
+        f.write(html)
+
+    print(f"Dashboard generated: {output_path}")
+    print("Open it in your browser to view.")
+
+
+if __name__ == "__main__":
+    build_dashboard()

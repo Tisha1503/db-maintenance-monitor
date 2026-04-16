@@ -1,0 +1,54 @@
+-- =============================================
+-- SAMPLE DATA
+-- Represents a company with 4 database servers
+-- and 8 maintenance jobs across them
+-- =============================================
+
+-- 4 database instances across different environments
+INSERT INTO database_instances VALUES
+  (1, 'orders-primary',     'PostgreSQL', 'production',  'db-prod-01.internal', 500,  '2024-01-15'),
+  (2, 'orders-replica',     'PostgreSQL', 'production',  'db-prod-02.internal', 500,  '2024-01-15'),
+  (3, 'analytics-warehouse','MySQL',      'production',  'db-prod-03.internal', 2000, '2024-03-01'),
+  (4, 'user-profiles',      'PostgreSQL', 'staging',     'db-stg-01.internal',  100,  '2024-06-01');
+
+-- 8 maintenance jobs across those databases
+INSERT INTO jobs VALUES
+  (1, 1, 'nightly_backup',       'backup',         '0 2 * * *',  1, '2024-01-15'),
+  (2, 1, 'index_rebuild',        'index_rebuild',   '0 3 * * 0',  1, '2024-01-15'),
+  (3, 1, 'log_cleanup',          'log_cleanup',     '0 4 * * *',  1, '2024-02-01'),
+  (4, 2, 'replica_backup',       'backup',          '0 2 * * *',  1, '2024-01-15'),
+  (5, 3, 'warehouse_backup',     'backup',          '0 1 * * *',  1, '2024-03-01'),
+  (6, 3, 'stats_update',         'statistics',      '0 5 * * *',  1, '2024-03-01'),
+  (7, 3, 'data_archival',        'archival',        '0 0 1 * *',  1, '2024-04-01'),
+  (8, 4, 'staging_backup',       'backup',          '0 6 * * 1',  1, '2024-06-01');
+
+-- Job execution history (19 runs over the past week)
+INSERT INTO job_executions VALUES
+  -- Nightly backup (job 1) — mostly successful, one failure, one slow run
+  (1,  1, 'SUCCESS', '2025-04-09 02:00:00', '2025-04-09 02:23:45', 1425,  150000, NULL,                              245.5),
+  (2,  1, 'SUCCESS', '2025-04-10 02:00:00', '2025-04-10 02:25:12', 1512,  152000, NULL,                              248.1),
+  (3,  1, 'FAILED',  '2025-04-11 02:00:00', '2025-04-11 02:05:33', 333,   0,      'Disk space exceeded on target',   0),
+  (4,  1, 'SUCCESS', '2025-04-12 02:00:00', '2025-04-12 02:22:08', 1328,  151000, NULL,                              246.8),
+  (5,  1, 'SUCCESS', '2025-04-13 02:00:00', '2025-04-13 02:24:55', 1495,  153000, NULL,                              249.2),
+  (6,  1, 'WARNING', '2025-04-14 02:00:00', '2025-04-14 02:45:02', 2702,  154000, 'Slow: exceeded 30min threshold',  251.0),
+  (7,  1, 'SUCCESS', '2025-04-15 02:00:00', '2025-04-15 02:21:30', 1290,  155000, NULL,                              252.3),
+
+  -- Index rebuild (job 2) — weekly on Sunday
+  (8,  2, 'SUCCESS', '2025-04-13 03:00:00', '2025-04-13 03:45:22', 2722,  42,     NULL,                              0),
+
+  -- Log cleanup (job 3) — frees up space (negative storage)
+  (9,  3, 'SUCCESS', '2025-04-09 04:00:00', '2025-04-09 04:02:15', 135,   85000,  NULL,                              -12.5),
+  (10, 3, 'SUCCESS', '2025-04-10 04:00:00', '2025-04-10 04:01:58', 118,   72000,  NULL,                              -10.2),
+  (11, 3, 'SUCCESS', '2025-04-11 04:00:00', '2025-04-11 04:02:44', 164,   91000,  NULL,                              -14.1),
+
+  -- Warehouse backup (job 5) — large database, takes over an hour
+  (12, 5, 'SUCCESS', '2025-04-09 01:00:00', '2025-04-09 02:15:00', 4500,  2000000, NULL,                             1820.5),
+  (13, 5, 'FAILED',  '2025-04-10 01:00:00', '2025-04-10 01:12:44', 764,   500000,  'Connection timeout to S3 bucket', 0),
+  (14, 5, 'SUCCESS', '2025-04-11 01:00:00', '2025-04-11 02:18:33', 4713,  2100000, NULL,                             1855.2),
+  (15, 5, 'SUCCESS', '2025-04-12 01:00:00', '2025-04-12 02:20:11', 4811,  2150000, NULL,                             1890.0),
+
+  -- Stats update (job 6)
+  (16, 6, 'SUCCESS', '2025-04-09 05:00:00', '2025-04-09 05:08:22', 502,   35,     NULL,                              0),
+  (17, 6, 'SUCCESS', '2025-04-10 05:00:00', '2025-04-10 05:07:55', 475,   35,     NULL,                              0),
+  (18, 6, 'FAILED',  '2025-04-11 05:00:00', '2025-04-11 05:00:45', 45,    0,      'Lock timeout on analytics table', 0),
+  (19, 6, 'SUCCESS', '2025-04-12 05:00:00', '2025-04-12 05:09:10', 550,   35,     NULL,                              0);
