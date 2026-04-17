@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DB Maintenance Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg: #0b0e14;
+  --surface: #131720;
+  --surface-2: #1a1f2e;
+  --border: #232a3b;
+  --text: #e0e4eb;
+  --text-dim: #6b7280;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59,130,246,0.15);
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --radius: 12px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.top-bar h1 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.top-bar h1 span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+}
+
+.top-bar .meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.dashboard {
+  padding: 1.5rem 2rem 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.4rem;
+}
+
+.card-label {
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4rem;
+}
+
+.card-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.card-value.green { color: var(--green); }
+.card-value.amber { color: var(--amber); }
+.card-value.red   { color: var(--red); }
+.card-value.blue  { color: var(--accent); }
+
+.card-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.grid-full {
+  margin-bottom: 1.5rem;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+}
+
+.panel-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-blue  { background: var(--accent); }
+.dot-green { background: var(--green); }
+.dot-amber { background: var(--amber); }
+.dot-red   { background: var(--red); }
+
+.alert-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.alert-item.critical {
+  background: var(--red-dim);
+  border-left: 3px solid var(--red);
+}
+
+.alert-item.warning {
+  background: var(--amber-dim);
+  border-left: 3px solid var(--amber);
+}
+
+.alert-severity {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.1rem;
+}
+
+.alert-item.critical .alert-severity {
+  background: var(--red);
+  color: #fff;
+}
+
+.alert-item.warning .alert-severity {
+  background: var(--amber);
+  color: #000;
+}
+
+.alert-body { flex: 1; }
+.alert-job  { font-weight: 600; }
+.alert-msg  { color: var(--text-dim); margin-top: 0.15rem; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.data-table th {
+  text-align: left;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--surface-2); }
+
+.badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.badge-green { background: var(--green-dim); color: var(--green); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); }
+.badge-red   { background: var(--red-dim);   color: var(--red); }
+
+.chart-wrap {
+  position: relative;
+  height: 280px;
+}
+
+@media (max-width: 900px) {
+  .summary-row { grid-template-columns: repeat(2, 1fr); }
+  .grid-2      { grid-template-columns: 1fr; }
+  .dashboard   { padding: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>DB Maintenance Monitor <span>LIVE</span></h1>
+  <div class="meta">Generated: <span id="gen-time"></span></div>
+</div>
+
+<div class="dashboard">
+
+  <div class="summary-row" id="summary-cards"></div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Active Alerts</div>
+      <div class="alert-list" id="alerts-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-green"></span> Success Rate by Job</div>
+      <div class="chart-wrap"><canvas id="chart-success"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-blue"></span> Daily Execution Trend</div>
+      <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-amber"></span> Job Duration (min / avg / max)</div>
+      <div class="chart-wrap"><canvas id="chart-duration"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-blue"></span> Cumulative Storage Growth (MB)</div>
+      <div class="chart-wrap"><canvas id="chart-storage"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Top Failure Causes</div>
+      <div class="chart-wrap"><canvas id="chart-failures"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-full">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-red"></span> Failure Log</div>
+      <table class="data-table" id="failure-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Database</th>
+            <th>Job</th>
+            <th>Type</th>
+            <th>Error</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-full">
+    <div class="panel">
+      <div class="panel-title"><span class="dot dot-green"></span> Storage Usage by Instance</div>
+      <table class="data-table" id="storage-table">
+        <thead>
+          <tr>
+            <th>Instance</th>
+            <th>Engine</th>
+            <th>Allocated (GB)</th>
+            <th>Backup Storage Used (MB)</th>
+            <th>Backup Storage Used (GB)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DATA = {"alerts": [{"instance": "orders-primary", "job": "nightly_backup", "message": "Success rate is 76.7% (below 80% threshold)", "severity": "WARNING", "timestamp": null, "type": "low_success_rate"}, {"instance": "analytics-warehouse", "job": "stats_update", "message": "Success rate is 76.7% (below 80% threshold)", "severity": "WARNING", "timestamp": null, "type": "low_success_rate"}], "daily_trend": [{"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-18", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 1, "run_date": "2026-03-19", "successes": 4, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 1, "run_date": "2026-03-20", "successes": 4, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-21", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 83.3, "failures": 1, "run_date": "2026-03-22", "successes": 5, "total": 6, "warnings": 0}, {"daily_success_rate": 83.3, "failures": 1, "run_date": "2026-03-23", "successes": 5, "total": 6, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 0, "run_date": "2026-03-24", "successes": 4, "total": 5, "warnings": 1}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-25", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-26", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 0, "run_date": "2026-03-27", "successes": 4, "total": 5, "warnings": 1}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-28", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-29", "successes": 6, "total": 6, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-03-30", "successes": 6, "total": 6, "warnings": 0}, {"daily_success_rate": 60.0, "failures": 2, "run_date": "2026-03-31", "successes": 3, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-01", "successes": 6, "total": 6, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-02", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-03", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-04", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 83.3, "failures": 0, "run_date": "2026-04-05", "successes": 5, "total": 6, "warnings": 1}, {"daily_success_rate": 83.3, "failures": 1, "run_date": "2026-04-06", "successes": 5, "total": 6, "warnings": 0}, {"daily_success_rate": 60.0, "failures": 2, "run_date": "2026-04-07", "successes": 3, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 1, "run_date": "2026-04-08", "successes": 4, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 1, "run_date": "2026-04-09", "successes": 4, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 0, "run_date": "2026-04-10", "successes": 4, "total": 5, "warnings": 1}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-11", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 66.7, "failures": 0, "run_date": "2026-04-12", "successes": 4, "total": 6, "warnings": 2}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-13", "successes": 6, "total": 6, "warnings": 0}, {"daily_success_rate": 100.0, "failures": 0, "run_date": "2026-04-14", "successes": 5, "total": 5, "warnings": 0}, {"daily_success_rate": 60.0, "failures": 2, "run_date": "2026-04-15", "successes": 3, "total": 5, "warnings": 0}, {"daily_success_rate": 80.0, "failures": 0, "run_date": "2026-04-16", "successes": 4, "total": 5, "warnings": 1}], "duration_stats": [{"avg_duration": 4700.2, "duration_spread": 4783.0, "instance_name": "analytics-warehouse", "job_name": "warehouse_backup", "job_type": "backup", "max_duration": 8444.4, "min_duration": 3661.4, "total_runs": 29}, {"avg_duration": 3620.7, "duration_spread": 0.0, "instance_name": "analytics-warehouse", "job_name": "data_archival", "job_type": "archival", "max_duration": 3620.7, "min_duration": 3620.7, "total_runs": 1}, {"avg_duration": 2870.1, "duration_spread": 1603.4, "instance_name": "orders-primary", "job_name": "index_rebuild", "job_type": "index_rebuild", "max_duration": 3535.9, "min_duration": 1932.5, "total_runs": 4}, {"avg_duration": 1437.7, "duration_spread": 2054.5, "instance_name": "orders-replica", "job_name": "replica_backup", "job_type": "backup", "max_duration": 2991.8, "min_duration": 937.3, "total_runs": 29}, {"avg_duration": 1364.8, "duration_spread": 873.4, "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "max_duration": 1786.4, "min_duration": 913.0, "total_runs": 23}, {"avg_duration": 1268.1, "duration_spread": 317.4, "instance_name": "user-profiles", "job_name": "staging_backup", "job_type": "backup", "max_duration": 1421.6, "min_duration": 1104.2, "total_runs": 4}, {"avg_duration": 1018.8, "duration_spread": 1469.4, "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "max_duration": 2088.5, "min_duration": 619.1, "total_runs": 26}, {"avg_duration": 204.0, "duration_spread": 214.4, "instance_name": "orders-primary", "job_name": "log_cleanup", "job_type": "log_cleanup", "max_duration": 292.5, "min_duration": 78.1, "total_runs": 30}], "duration_trend": [{"avg_duration": 2722.7, "job_type": "backup", "run_date": "2026-03-18"}, {"avg_duration": 210.6, "job_type": "log_cleanup", "run_date": "2026-03-18"}, {"avg_duration": 619.1, "job_type": "statistics", "run_date": "2026-03-18"}, {"avg_duration": 2528.7, "job_type": "backup", "run_date": "2026-03-19"}, {"avg_duration": 258.3, "job_type": "log_cleanup", "run_date": "2026-03-19"}, {"avg_duration": 957.0, "job_type": "statistics", "run_date": "2026-03-19"}, {"avg_duration": 2911.7, "job_type": "backup", "run_date": "2026-03-20"}, {"avg_duration": 222.4, "job_type": "log_cleanup", "run_date": "2026-03-20"}, {"avg_duration": 1097.9, "job_type": "statistics", "run_date": "2026-03-20"}, {"avg_duration": 2189.2, "job_type": "backup", "run_date": "2026-03-21"}, {"avg_duration": 206.5, "job_type": "log_cleanup", "run_date": "2026-03-21"}, {"avg_duration": 815.9, "job_type": "statistics", "run_date": "2026-03-21"}, {"avg_duration": 1006.3, "job_type": "backup", "run_date": "2026-03-22"}, {"avg_duration": 1932.5, "job_type": "index_rebuild", "run_date": "2026-03-22"}, {"avg_duration": 204.5, "job_type": "log_cleanup", "run_date": "2026-03-22"}, {"avg_duration": 809.1, "job_type": "statistics", "run_date": "2026-03-22"}, {"avg_duration": 2357.5, "job_type": "backup", "run_date": "2026-03-23"}, {"avg_duration": 292.5, "job_type": "log_cleanup", "run_date": "2026-03-23"}, {"avg_duration": 971.9, "job_type": "statistics", "run_date": "2026-03-23"}, {"avg_duration": 2815.1, "job_type": "backup", "run_date": "2026-03-24"}, {"avg_duration": 100.7, "job_type": "log_cleanup", "run_date": "2026-03-24"}, {"avg_duration": 673.3, "job_type": "statistics", "run_date": "2026-03-24"}, {"avg_duration": 2691.2, "job_type": "backup", "run_date": "2026-03-25"}, {"avg_duration": 153.6, "job_type": "log_cleanup", "run_date": "2026-03-25"}, {"avg_duration": 1063.4, "job_type": "statistics", "run_date": "2026-03-25"}, {"avg_duration": 2174.7, "job_type": "backup", "run_date": "2026-03-26"}, {"avg_duration": 179.4, "job_type": "log_cleanup", "run_date": "2026-03-26"}, {"avg_duration": 960.3, "job_type": "statistics", "run_date": "2026-03-26"}, {"avg_duration": 2170.0, "job_type": "backup", "run_date": "2026-03-27"}, {"avg_duration": 265.0, "job_type": "log_cleanup", "run_date": "2026-03-27"}, {"avg_duration": 2088.5, "job_type": "statistics", "run_date": "2026-03-27"}, {"avg_duration": 2412.6, "job_type": "backup", "run_date": "2026-03-28"}, {"avg_duration": 182.0, "job_type": "log_cleanup", "run_date": "2026-03-28"}, {"avg_duration": 723.1, "job_type": "statistics", "run_date": "2026-03-28"}, {"avg_duration": 2133.8, "job_type": "backup", "run_date": "2026-03-29"}, {"avg_duration": 2761.2, "job_type": "index_rebuild", "run_date": "2026-03-29"}, {"avg_duration": 207.2, "job_type": "log_cleanup", "run_date": "2026-03-29"}, {"avg_duration": 1032.2, "job_type": "statistics", "run_date": "2026-03-29"}, {"avg_duration": 2071.2, "job_type": "backup", "run_date": "2026-03-30"}, {"avg_duration": 78.1, "job_type": "log_cleanup", "run_date": "2026-03-30"}, {"avg_duration": 715.5, "job_type": "statistics", "run_date": "2026-03-30"}, {"avg_duration": 3143.3, "job_type": "backup", "run_date": "2026-03-31"}, {"avg_duration": 194.4, "job_type": "log_cleanup", "run_date": "2026-03-31"}, {"avg_duration": 3620.7, "job_type": "archival", "run_date": "2026-04-01"}, {"avg_duration": 2722.3, "job_type": "backup", "run_date": "2026-04-01"}, {"avg_duration": 207.1, "job_type": "log_cleanup", "run_date": "2026-04-01"}, {"avg_duration": 1064.2, "job_type": "statistics", "run_date": "2026-04-01"}, {"avg_duration": 2288.1, "job_type": "backup", "run_date": "2026-04-02"}, {"avg_duration": 144.0, "job_type": "log_cleanup", "run_date": "2026-04-02"}, {"avg_duration": 632.1, "job_type": "statistics", "run_date": "2026-04-02"}, {"avg_duration": 2239.1, "job_type": "backup", "run_date": "2026-04-03"}, {"avg_duration": 190.8, "job_type": "log_cleanup", "run_date": "2026-04-03"}, {"avg_duration": 1117.9, "job_type": "statistics", "run_date": "2026-04-03"}, {"avg_duration": 2763.5, "job_type": "backup", "run_date": "2026-04-04"}, {"avg_duration": 269.2, "job_type": "log_cleanup", "run_date": "2026-04-04"}, {"avg_duration": 984.2, "job_type": "statistics", "run_date": "2026-04-04"}, {"avg_duration": 2485.7, "job_type": "backup", "run_date": "2026-04-05"}, {"avg_duration": 3535.9, "job_type": "index_rebuild", "run_date": "2026-04-05"}, {"avg_duration": 283.3, "job_type": "log_cleanup", "run_date": "2026-04-05"}, {"avg_duration": 1840.0, "job_type": "statistics", "run_date": "2026-04-05"}, {"avg_duration": 2172.3, "job_type": "backup", "run_date": "2026-04-06"}, {"avg_duration": 161.8, "job_type": "log_cleanup", "run_date": "2026-04-06"}, {"avg_duration": 913.6, "job_type": "statistics", "run_date": "2026-04-06"}, {"avg_duration": 2802.6, "job_type": "backup", "run_date": "2026-04-07"}, {"avg_duration": 209.8, "job_type": "log_cleanup", "run_date": "2026-04-07"}, {"avg_duration": 2896.0, "job_type": "backup", "run_date": "2026-04-08"}, {"avg_duration": 180.8, "job_type": "log_cleanup", "run_date": "2026-04-08"}, {"avg_duration": 986.0, "job_type": "statistics", "run_date": "2026-04-08"}, {"avg_duration": 2638.6, "job_type": "backup", "run_date": "2026-04-09"}, {"avg_duration": 221.8, "job_type": "log_cleanup", "run_date": "2026-04-09"}, {"avg_duration": 3104.8, "job_type": "backup", "run_date": "2026-04-10"}, {"avg_duration": 268.4, "job_type": "log_cleanup", "run_date": "2026-04-10"}, {"avg_duration": 1147.4, "job_type": "statistics", "run_date": "2026-04-10"}, {"avg_duration": 2773.3, "job_type": "backup", "run_date": "2026-04-11"}, {"avg_duration": 211.5, "job_type": "log_cleanup", "run_date": "2026-04-11"}, {"avg_duration": 828.5, "job_type": "statistics", "run_date": "2026-04-11"}, {"avg_duration": 4394.6, "job_type": "backup", "run_date": "2026-04-12"}, {"avg_duration": 3250.9, "job_type": "index_rebuild", "run_date": "2026-04-12"}, {"avg_duration": 255.2, "job_type": "log_cleanup", "run_date": "2026-04-12"}, {"avg_duration": 1084.0, "job_type": "statistics", "run_date": "2026-04-12"}, {"avg_duration": 2080.6, "job_type": "backup", "run_date": "2026-04-13"}, {"avg_duration": 246.4, "job_type": "log_cleanup", "run_date": "2026-04-13"}, {"avg_duration": 739.4, "job_type": "statistics", "run_date": "2026-04-13"}, {"avg_duration": 2477.3, "job_type": "backup", "run_date": "2026-04-14"}, {"avg_duration": 122.7, "job_type": "log_cleanup", "run_date": "2026-04-14"}, {"avg_duration": 869.0, "job_type": "statistics", "run_date": "2026-04-14"}, {"avg_duration": 2849.7, "job_type": "backup", "run_date": "2026-04-15"}, {"avg_duration": 117.5, "job_type": "log_cleanup", "run_date": "2026-04-15"}, {"avg_duration": 2133.2, "job_type": "backup", "run_date": "2026-04-16"}, {"avg_duration": 273.2, "job_type": "log_cleanup", "run_date": "2026-04-16"}, {"avg_duration": 1754.6, "job_type": "statistics", "run_date": "2026-04-16"}], "failure_causes": [{"affected_jobs": "replica_backup,nightly_backup", "error_message": "Target backup directory not found", "occurrences": 3}, {"affected_jobs": "warehouse_backup,nightly_backup", "error_message": "Authentication failed for backup user", "occurrences": 3}, {"affected_jobs": "nightly_backup", "error_message": "Network interruption during transfer", "occurrences": 2}, {"affected_jobs": "stats_update", "error_message": "Memory allocation failed during analysis", "occurrences": 2}, {"affected_jobs": "stats_update", "error_message": "Statistics collection interrupted", "occurrences": 1}, {"affected_jobs": "stats_update", "error_message": "Lock timeout on analytics table", "occurrences": 1}, {"affected_jobs": "nightly_backup", "error_message": "Disk space exceeded on target", "occurrences": 1}], "failure_details": [{"duration_seconds": 51.4, "error_message": "Memory allocation failed during analysis", "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "started_at": "2026-04-15 05:00:00"}, {"duration_seconds": 246.1, "error_message": "Target backup directory not found", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-04-15 02:00:00"}, {"duration_seconds": 108.2, "error_message": "Memory allocation failed during analysis", "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "started_at": "2026-04-09 05:00:00"}, {"duration_seconds": 197.2, "error_message": "Authentication failed for backup user", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-04-08 02:00:00"}, {"duration_seconds": 155.6, "error_message": "Lock timeout on analytics table", "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "started_at": "2026-04-07 05:00:00"}, {"duration_seconds": 233.7, "error_message": "Network interruption during transfer", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-04-07 02:00:00"}, {"duration_seconds": 129.4, "error_message": "Network interruption during transfer", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-04-06 02:00:00"}, {"duration_seconds": 109.9, "error_message": "Statistics collection interrupted", "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "started_at": "2026-03-31 05:00:00"}, {"duration_seconds": 188.4, "error_message": "Target backup directory not found", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-03-31 02:00:00"}, {"duration_seconds": 229.4, "error_message": "Authentication failed for backup user", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-03-23 02:00:00"}, {"duration_seconds": 1036.9, "error_message": "Authentication failed for backup user", "instance_name": "analytics-warehouse", "job_name": "warehouse_backup", "job_type": "backup", "started_at": "2026-03-22 01:00:00"}, {"duration_seconds": 252.9, "error_message": "Disk space exceeded on target", "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "started_at": "2026-03-20 02:00:00"}, {"duration_seconds": 98.9, "error_message": "Target backup directory not found", "instance_name": "orders-replica", "job_name": "replica_backup", "job_type": "backup", "started_at": "2026-03-19 02:00:00"}], "generated_at": "2026-04-17 14:00:25", "health_summary": {"active_jobs": 8, "failures": 13, "success_rate_pct": 87.4, "successes": 139, "total_executions": 159, "warnings": 7}, "storage_by_instance": [{"allocated_gb": 2000.0, "db_engine": "MySQL", "instance_name": "analytics-warehouse", "total_storage_used_gb": 28.01, "total_storage_used_mb": 28684.8}, {"allocated_gb": 500.0, "db_engine": "PostgreSQL", "instance_name": "orders-replica", "total_storage_used_gb": 6.99, "total_storage_used_mb": 7160.0}, {"allocated_gb": 500.0, "db_engine": "PostgreSQL", "instance_name": "orders-primary", "total_storage_used_gb": 5.25, "total_storage_used_mb": 5376.1}, {"allocated_gb": 100.0, "db_engine": "PostgreSQL", "instance_name": "user-profiles", "total_storage_used_gb": 0.2, "total_storage_used_mb": 205.9}], "storage_trend": [{"cumulative_storage_mb": 1414.2, "daily_storage_mb": 1414.2, "run_date": "2026-03-18"}, {"cumulative_storage_mb": 2800.5, "daily_storage_mb": 1386.3, "run_date": "2026-03-19"}, {"cumulative_storage_mb": 4148.0, "daily_storage_mb": 1347.5, "run_date": "2026-03-20"}, {"cumulative_storage_mb": 5550.3, "daily_storage_mb": 1402.3, "run_date": "2026-03-21"}, {"cumulative_storage_mb": 6036.9, "daily_storage_mb": 486.6, "run_date": "2026-03-22"}, {"cumulative_storage_mb": 7211.6, "daily_storage_mb": 1174.7, "run_date": "2026-03-23"}, {"cumulative_storage_mb": 8618.7, "daily_storage_mb": 1407.1, "run_date": "2026-03-24"}, {"cumulative_storage_mb": 10032.7, "daily_storage_mb": 1414.0, "run_date": "2026-03-25"}, {"cumulative_storage_mb": 11435.1, "daily_storage_mb": 1402.4, "run_date": "2026-03-26"}, {"cumulative_storage_mb": 13035.9, "daily_storage_mb": 1600.8, "run_date": "2026-03-27"}, {"cumulative_storage_mb": 14435.0, "daily_storage_mb": 1399.1, "run_date": "2026-03-28"}, {"cumulative_storage_mb": 16006.3, "daily_storage_mb": 1571.3, "run_date": "2026-03-29"}, {"cumulative_storage_mb": 17603.7, "daily_storage_mb": 1597.4, "run_date": "2026-03-30"}, {"cumulative_storage_mb": 18848.3, "daily_storage_mb": 1244.6, "run_date": "2026-03-31"}, {"cumulative_storage_mb": 20160.4, "daily_storage_mb": 1312.1, "run_date": "2026-04-01"}, {"cumulative_storage_mb": 21461.3, "daily_storage_mb": 1300.9, "run_date": "2026-04-02"}, {"cumulative_storage_mb": 22902.0, "daily_storage_mb": 1440.7, "run_date": "2026-04-03"}, {"cumulative_storage_mb": 24414.5, "daily_storage_mb": 1512.5, "run_date": "2026-04-04"}, {"cumulative_storage_mb": 25818.9, "daily_storage_mb": 1404.4, "run_date": "2026-04-05"}, {"cumulative_storage_mb": 27101.9, "daily_storage_mb": 1283.0, "run_date": "2026-04-06"}, {"cumulative_storage_mb": 28170.2, "daily_storage_mb": 1068.3, "run_date": "2026-04-07"}, {"cumulative_storage_mb": 29427.5, "daily_storage_mb": 1257.3, "run_date": "2026-04-08"}, {"cumulative_storage_mb": 31043.5, "daily_storage_mb": 1616.0, "run_date": "2026-04-09"}, {"cumulative_storage_mb": 32533.5, "daily_storage_mb": 1490.0, "run_date": "2026-04-10"}, {"cumulative_storage_mb": 34045.5, "daily_storage_mb": 1512.0, "run_date": "2026-04-11"}, {"cumulative_storage_mb": 35409.5, "daily_storage_mb": 1364.0, "run_date": "2026-04-12"}, {"cumulative_storage_mb": 37054.7, "daily_storage_mb": 1645.2, "run_date": "2026-04-13"}, {"cumulative_storage_mb": 38652.8, "daily_storage_mb": 1598.1, "run_date": "2026-04-14"}, {"cumulative_storage_mb": 39900.8, "daily_storage_mb": 1248.0, "run_date": "2026-04-15"}, {"cumulative_storage_mb": 41426.8, "daily_storage_mb": 1526.0, "run_date": "2026-04-16"}], "success_rates": [{"failures": 7, "instance_name": "orders-primary", "job_name": "nightly_backup", "job_type": "backup", "success_rate_pct": 76.7, "successes": 23, "total_runs": 30}, {"failures": 4, "instance_name": "analytics-warehouse", "job_name": "stats_update", "job_type": "statistics", "success_rate_pct": 76.7, "successes": 23, "total_runs": 30}, {"failures": 1, "instance_name": "orders-replica", "job_name": "replica_backup", "job_type": "backup", "success_rate_pct": 90.0, "successes": 27, "total_runs": 30}, {"failures": 1, "instance_name": "analytics-warehouse", "job_name": "warehouse_backup", "job_type": "backup", "success_rate_pct": 90.0, "successes": 27, "total_runs": 30}, {"failures": 0, "instance_name": "orders-primary", "job_name": "index_rebuild", "job_type": "index_rebuild", "success_rate_pct": 100.0, "successes": 4, "total_runs": 4}, {"failures": 0, "instance_name": "orders-primary", "job_name": "log_cleanup", "job_type": "log_cleanup", "success_rate_pct": 100.0, "successes": 30, "total_runs": 30}, {"failures": 0, "instance_name": "analytics-warehouse", "job_name": "data_archival", "job_type": "archival", "success_rate_pct": 100.0, "successes": 1, "total_runs": 1}, {"failures": 0, "instance_name": "user-profiles", "job_name": "staging_backup", "job_type": "backup", "success_rate_pct": 100.0, "successes": 4, "total_runs": 4}]};
+
+Chart.defaults.color = '#6b7280';
+Chart.defaults.borderColor = '#232a3b';
+Chart.defaults.font.family = "'Outfit', sans-serif";
+Chart.defaults.font.size = 11;
+
+function fmt(n) { return n.toLocaleString(); }
+function fmtDur(s) {
+  if (s < 60) return s.toFixed(0) + 's';
+  return (s / 60).toFixed(1) + 'm';
+}
+
+const hs = DATA.health_summary;
+const rateClass = hs.success_rate_pct >= 90 ? 'green' : hs.success_rate_pct >= 75 ? 'amber' : 'red';
+document.getElementById('gen-time').textContent = DATA.generated_at;
+document.getElementById('summary-cards').innerHTML = `
+  <div class="card">
+    <div class="card-label">Success Rate</div>
+    <div class="card-value ${rateClass}">${hs.success_rate_pct}%</div>
+    <div class="card-sub">Overall</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Executions</div>
+    <div class="card-value blue">${fmt(hs.total_executions)}</div>
+    <div class="card-sub">Last 30 days</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Successes</div>
+    <div class="card-value green">${fmt(hs.successes)}</div>
+    <div class="card-sub">jobs completed</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Failures</div>
+    <div class="card-value red">${fmt(hs.failures)}</div>
+    <div class="card-sub">jobs failed</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Warnings</div>
+    <div class="card-value amber">${fmt(hs.warnings)}</div>
+    <div class="card-sub">slow runs</div>
+  </div>
+`;
+
+const alertsEl = document.getElementById('alerts-list');
+if (DATA.alerts.length === 0) {
+  alertsEl.innerHTML = '<div style="color:var(--green);font-size:0.9rem;">All systems healthy — no active alerts.</div>';
+} else {
+  alertsEl.innerHTML = DATA.alerts.map(a => `
+    <div class="alert-item ${a.severity.toLowerCase()}">
+      <span class="alert-severity">${a.severity}</span>
+      <div class="alert-body">
+        <div class="alert-job">${a.instance} / ${a.job}</div>
+        <div class="alert-msg">${a.message}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+const srData = DATA.success_rates;
+new Chart(document.getElementById('chart-success'), {
+  type: 'bar',
+  data: {
+    labels: srData.map(r => r.job_name),
+    datasets: [{
+      label: 'Success Rate %',
+      data: srData.map(r => r.success_rate_pct),
+      backgroundColor: srData.map(r =>
+        r.success_rate_pct >= 90 ? '#10b981' :
+        r.success_rate_pct >= 75 ? '#f59e0b' : '#ef4444'
+      ),
+      borderRadius: 6,
+      maxBarThickness: 40,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          afterLabel: (ctx) => {
+            const r = srData[ctx.dataIndex];
+            return `${r.successes}/${r.total_runs} runs | ${r.instance_name}`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { max: 100, grid: { color: '#1a1f2e' } },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+const trend = DATA.daily_trend;
+new Chart(document.getElementById('chart-trend'), {
+  type: 'bar',
+  data: {
+    labels: trend.map(r => r.run_date.slice(5)),
+    datasets: [
+      { label: 'Success', data: trend.map(r => r.successes), backgroundColor: '#10b981', borderRadius: 3 },
+      { label: 'Warning', data: trend.map(r => r.warnings), backgroundColor: '#f59e0b', borderRadius: 3 },
+      { label: 'Failed', data: trend.map(r => r.failures), backgroundColor: '#ef4444', borderRadius: 3 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 15 } } },
+    scales: {
+      x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 } } },
+      y: { stacked: true, grid: { color: '#1a1f2e' } }
+    }
+  }
+});
+
+const dur = DATA.duration_stats;
+new Chart(document.getElementById('chart-duration'), {
+  type: 'bar',
+  data: {
+    labels: dur.map(r => r.job_name),
+    datasets: [
+      { label: 'Min', data: dur.map(r => r.min_duration), backgroundColor: 'rgba(59,130,246,0.3)', borderRadius: 3 },
+      { label: 'Avg', data: dur.map(r => r.avg_duration), backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 3 },
+      { label: 'Max', data: dur.map(r => r.max_duration), backgroundColor: 'rgba(59,130,246,1)', borderRadius: 3 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, padding: 15 } },
+      tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtDur(ctx.raw)}` } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 } } },
+      y: { grid: { color: '#1a1f2e' }, ticks: { callback: v => fmtDur(v) } }
+    }
+  }
+});
+
+const stor = DATA.storage_trend;
+new Chart(document.getElementById('chart-storage'), {
+  type: 'line',
+  data: {
+    labels: stor.map(r => r.run_date.slice(5)),
+    datasets: [{
+      label: 'Cumulative Storage (MB)',
+      data: stor.map(r => r.cumulative_storage_mb),
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      fill: true, tension: 0.3,
+      pointRadius: 0, pointHoverRadius: 4, borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 } } },
+      y: { grid: { color: '#1a1f2e' }, ticks: { callback: v => (v/1024).toFixed(1) + ' GB' } }
+    }
+  }
+});
+
+const fc = DATA.failure_causes;
+const fcColors = ['#ef4444','#f59e0b','#3b82f6','#10b981','#8b5cf6','#ec4899','#6b7280'];
+new Chart(document.getElementById('chart-failures'), {
+  type: 'doughnut',
+  data: {
+    labels: fc.map(r => r.error_message.length > 30 ? r.error_message.slice(0,30) + '...' : r.error_message),
+    datasets: [{
+      data: fc.map(r => r.occurrences),
+      backgroundColor: fcColors.slice(0, fc.length),
+      borderWidth: 0,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 10, padding: 8, font: { size: 10 } } },
+      tooltip: { callbacks: { afterLabel: (ctx) => `Affected: ${fc[ctx.dataIndex].affected_jobs}` } }
+    }
+  }
+});
+
+const ftBody = document.querySelector('#failure-table tbody');
+DATA.failure_details.forEach(f => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;">${f.started_at}</td>
+    <td>${f.instance_name}</td>
+    <td>${f.job_name}</td>
+    <td><span class="badge badge-red">${f.job_type}</span></td>
+    <td style="color:var(--red)">${f.error_message}</td>
+    <td>${fmtDur(f.duration_seconds)}</td>
+  `;
+  ftBody.appendChild(tr);
+});
+
+const stBody = document.querySelector('#storage-table tbody');
+DATA.storage_by_instance.forEach(s => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="font-weight:500">${s.instance_name}</td>
+    <td><span class="badge badge-green">${s.db_engine}</span></td>
+    <td>${fmt(s.allocated_gb)}</td>
+    <td>${fmt(s.total_storage_used_mb)}</td>
+    <td>${s.total_storage_used_gb}</td>
+  `;
+  stBody.appendChild(tr);
+});
+</script>
+
+</body>
+</html>
